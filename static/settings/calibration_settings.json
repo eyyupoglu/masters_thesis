@@ -1,0 +1,16 @@
+{
+  "general_settings": {
+    "name": "test_calibration",
+    "version": "1.0.0",
+    "dependencies": {},
+    "output_folder": "C://Users//eyyup//Desktop//packages//masters_thesis//static//output_folder",
+    "input_data_path": "C://Users//eyyup//Desktop//packages//masters_thesis//static//data/data_from_mars.csv",
+    "data_length": "5y",
+    "data_frequency": "weekly"
+  },
+  "risk_factors": {
+    "equity": {
+      "scope": ["US78378X1072"]
+    }
+  }
+}
