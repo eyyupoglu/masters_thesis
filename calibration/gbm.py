@@ -11,5 +11,5 @@ def calibrate_gbm(data_frame, delta):
     df_params = pd.concat([df_mu, df_sigma], axis=1).T
 
     params = df_params.to_dict()
-    print(params)
+    # print(params)
     return params

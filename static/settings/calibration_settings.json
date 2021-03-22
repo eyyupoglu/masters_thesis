@@ -3,14 +3,21 @@
     "name": "test_calibration",
     "version": "1.0.0",
     "dependencies": {},
-    "output_folder": "C://Users//eyyup//Desktop//packages//masters_thesis//static//output_folder",
+    "eod_date": "2021-03-17",
     "input_data_path": "C://Users//eyyup//Desktop//packages//masters_thesis//static//data/data_from_mars.csv",
-    "data_length": "5y",
+    "output_folder": "C://Users//eyyup//Desktop//packages//masters_thesis//static//output_folder",
+    "data_length_y": 3,
     "data_frequency": "weekly"
   },
   "risk_factors": {
     "equity": {
-      "scope": ["US78378X1072"]
+      "scope": [ "US78378X1072", "EU0009658145", "US9839191015", "US0718131099",
+         "US0865161014", "US0970231058", "JP3906000009", "JP3122400009",
+         "US1011371077", "US1101221083", "DE0007100000", "DE0007164600", "DE0007236101", "DE0008404005",
+       "DE000BASF111", "DE000BAY0017", "DE000ENAG999", "DE000ZAL1111",
+       "DK0010268606", "DK0010272202"],
+      "model": "GBM"
     }
   }
 }
+

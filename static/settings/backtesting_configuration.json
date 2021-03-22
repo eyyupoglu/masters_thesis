@@ -1,0 +1,11 @@
+{
+  "name": "settings",
+  "version": "1.0.0",
+  "back_testing_critical_values_path": "C:/Users/eyyup/Desktop/packages/masters_thesis/static/data/backtesting/",
+  "back_testing_output_path": "C:/Users/eyyup/Desktop/packages/masters_thesis/static/data/backtesting/output",
+  "backtesting_horizon_w": [4, 8, 24, 52],
+  "backtesting_window_w": 312,
+  "backtesting_frequency_w": 1,
+  "calibration_freq_w": 12,
+  "simulation_amount": 1000
+}
