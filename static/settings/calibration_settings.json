@@ -5,7 +5,7 @@
     "dependencies": {},
     "eod_date": "2021-03-17",
     "input_data_path": "C://Users//eyyup//Desktop//packages//masters_thesis//static//data/data_from_mars.csv",
-    "output_folder": "C://Users//eyyup//Desktop//packages//masters_thesis//static//output_folder",
+    "output_folder": "C://Users//eyyup//Desktop//packages//masters_thesis//static//data//backtesting//output",
     "data_length_y": 3,
     "data_frequency": "weekly"
   },

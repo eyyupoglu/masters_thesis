@@ -8,6 +8,10 @@ import matplotlib.pyplot as plt
 from docutils.nodes import legend
 from pandas import ExcelWriter
 import seaborn as sns
+from os.path import join, exists
+from os import mkdir
+import matplotlib.style as style
+
 sns.set()
 
 from calibration.gbm import calibrate_gbm
@@ -90,26 +94,29 @@ def backtest_gbm(calibration_config_path, backtest_config_path, visualize=True):
             elif ks_metric <= np.quantile(ks_metrics_dist, 0.95):
                 rgb_dict[horizon][equity] = 'GREEN'
             if visualize is True:
-                df_critical_paths.T.plot(color='k', legend=False)
-                plt.plot(np.sort(p_list), color='red')
-                plt.title(equity)
-                plt.show()
+                plt.style.use('seaborn-white')
+                fig, axes = plt.subplots(1, 3, figsize=(15, 7))
+                axes[0].plot(df.index[:len(p_list)], p_list, color='r')
+                axes[0].set_title('p-values', fontsize=24)
 
-                plt.hist(ks_metrics_dist, color='k')
-                plt.axvline(x=ks_metric, color='r')
-                plt.title(equity)
-                plt.show()
+                df_critical_paths.T.plot(color='k', legend=False, ax=axes[1])
+                axes[1].plot(np.sort(p_list), color='red')
+                axes[1].set_title('sorted p-values of ideal paths', fontsize=24)
 
-                fig, axes = plt.subplots(nrows=1, ncols=2)
-                df_critical_paths.T.plot(color='k', legend=False).plot(ax=axes[0])
-                pd.DataFrame(ks_metrics_dist).hist(ax=axes[1])
-                plt.show()
+                axes[2].hist(ks_metrics_dist, color='k')
+                axes[2].axvline(x=ks_metric, color='r', lw=5)
+                axes[2].set_title('One sided \nKS distances', fontsize=24)
 
-                plt.figure(1)
-                plt.subplot(2, 1, 1)
-                df_critical_paths.T.plot(color='k', legend=False).plot()  # no need to specify for first axis
-                plt.subplot(2, 1, 2)
-                pd.DataFrame(ks_metrics_dist).hist(ax=plt.gca())
+                fig.suptitle('ISIN: %s' % equity, fontsize=30)
+
+                plots_path = join(join(dict_cal['general_settings']['output_folder'], 'plots'), str(horizon))
+                if not exists(plots_path):
+                    mkdir(plots_path)
+                plt.savefig(join(plots_path, equity))
+                # plt.show()
+
+
+
 
 
     xls_path = join(dict_bt['back_testing_output_path'], 'rgb_results_%s.xlsx' % dict_bt['backtesting_horizon_w'])
@@ -126,4 +133,4 @@ if __name__ == "__main__":
     calibration_config_path = 'C:/Users/eyyup/Desktop/packages/masters_thesis/static/settings/calibration_settings.json'
     backtest_config_path = 'C:/Users/eyyup/Desktop/packages/masters_thesis/static/settings/backtesting_configuration.json'
 
-    backtest_gbm(calibration_config_path, backtest_config_path, visualize=True)
+    backtest_gbm(calibration_config_path, backtest_config_path, visualize=False)
