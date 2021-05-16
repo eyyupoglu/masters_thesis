@@ -28,6 +28,5 @@ def simulated_gbm_pointwise(initial_value, params, horizon, N):
     mu = params['mu']
     sigma = params['sigma']
     dt = 1 / 52 * horizon
-    simulated = initial_value * np.exp((mu - 0.5 * sigma ** 2) * dt +
-                                                              sigma * np.sqrt(dt) * rand)
+    simulated = initial_value * np.exp((mu - 0.5 * sigma ** 2) * dt + sigma * np.sqrt(dt) * rand)
     return pd.DataFrame(data=simulated, columns=[horizon])

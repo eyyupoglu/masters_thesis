@@ -4,6 +4,194 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+from mpl_toolkits.mplot3d import Axes3D
+import numpy as np
+import matplotlib.pyplot as plt
+from math import exp, log, sqrt, pi
+import pandas as pd
+import time
+
+start_time = time.time()
+
+
+class Heston(object):
+    def __init__(self):
+        pass
+    @staticmethod
+    def simulate(scheme, negvar, numPaths, rho, S_0, V_0, T, kappa, theta, sigma, r, q):
+        num_time = int(T / dt)
+        S = np.zeros((num_time + 1, numPaths))
+        S[0, :] = S_0
+        V = np.zeros((num_time + 1, numPaths))
+        V[0, :] = V_0
+        Vcount0 = 0
+        for i in range(numPaths):
+            for t_step in range(1, num_time + 1):
+                # the 2 stochastic drivers for variance V and asset price S and correlated
+                Zv = np.random.randn(1)
+                Zs = rho * Zv + sqrt(1 - rho ** 2) * np.random.randn(1)
+                # users can choose either Euler or Milstein scheme
+                if scheme == 'Euler':
+                    V[t_step, i] = V[t_step - 1, i] + kappa * (theta - V[t_step - 1, i]) * dt + sigma * sqrt(
+                        V[t_step - 1, i]) * sqrt(dt) * Zv
+                elif scheme == 'Milstein':
+                    V[t_step, i] = V[t_step - 1, i] + kappa * (theta - V[t_step - 1, i]) * dt + sigma * sqrt(
+                        V[t_step - 1, i]) * sqrt(dt) * Zv \
+                                   + 1 / 4 * sigma ** 2 * dt * (Zv ** 2 - 1)
+
+                if V[t_step, i] <= 0:
+                    Vcount0 = Vcount0 + 1
+                    if negvar == 'Reflect':
+                        V[t_step, i] = abs(V[t_step, i])
+                    elif negvar == 'Trunca':
+                        V[t_step, i] = max(V[t_step, i], 0)
+
+                ################         simluations for asset price S              ########
+                S[t_step, i] = S[t_step - 1, i] * np.exp((r - q - V[t_step - 1, i] / 2) * dt + sqrt(V[t_step - 1, i]) * sqrt(dt) * Zs)
+        return S, V, Vcount0
+
+    @staticmethod
+    def calibrate():
+        pass
+
+    @staticmethod
+    def likelihoodAW(param, x, r, q, dt, method):
+        kappa = param[0]
+        theta = param[1]
+        sigma = param[2]
+        v0 = param[3]
+        rho = param[4]
+
+        # Atiya and Wall parameterization
+        alpha = kappa * theta
+        beta = kappa
+
+        #  Number of log - stock prices
+        T = len(x)
+
+        # Drift term
+        mu = r - q
+
+        # Equation (17)
+        betap = 1 - beta*dt
+
+        # Equation (18) - denominator of d(t)
+        D = 2 * pi * sigma * np.sqrt(1 - rho** 2) * dt
+
+
+        # Equation (14)
+        a = (betap**2 + rho*sigma*betap*dt + sigma**2 * dt**2 / 4) / (2 * sigma**2 * (1-rho**2) *dt)
+
+        # Variance and likelihood at time t = 0
+        v = np.zeros(len(x))
+        L = np.zeros(len(x))
+        v[0] = v0
+        if method == 1:
+            L[0] = np.exp(-v[0])   # Construct the Likelihood
+        elif method == 2:
+            L[0] = -v[0]         # Construct the log-likelihood
+
+        # Construction the likelihood for time t = 1 through t = T
+        for t in range(T-1):
+            # Stock price increment
+            dx  = x[t + 1] - x[t]
+            # Equations (31) and (32)
+            B = -alpha*dt - rho*sigma*(dx-mu*dt)
+            C = alpha**2*dt**2 + 2*rho*sigma*alpha*dt*(dx-mu*dt) + sigma**2*(dx-mu*dt)**2 - 2*v[t]**2*a*sigma**2*(1-rho**2)*dt
+            # Equation (30) to update the variance
+            if B**2 - C > 0:
+                v[t+1] = np.sqrt(B**2 - C) - B
+            else:
+                # If v(t+1) is imaginary use the approximation Equation (33)
+                bt = ((v[t]-alpha*dt)**2 - 2*rho*sigma*(v[t]-alpha*dt)*(dx-mu*dt) + sigma**2*(dx-mu*dt)**2)  / (2*sigma**2*(1-rho**2)*dt)
+                if bt/a > 0:
+                    # Equation (33)
+                    v[t+1] = np.sqrt(bt/a)
+                else:
+                    # If v(t+1) is still negative, take the previous value
+                    v[t+1] = v[t]
+
+
+            # Equation (15) and (16)
+            bt = ((v[t+1]-alpha*dt)**2 - 2*rho*sigma*(v[t+1]-alpha*dt)*(dx-mu*dt) + sigma**2*(dx-mu*dt)**2)  / (2*sigma**2*(1-rho**2)*dt)
+            x1 = ((2*betap+rho*sigma*dt)*(v[t+1]-alpha*dt) - (2*rho*sigma*betap+sigma**2*dt)*(dx-mu*dt))   / (2*sigma**2*(1-rho**2)*dt)
+            x2 = -2*sqrt(a*bt)
+            # Combined exponent for Equation (34)
+            E = np.exp(x1 + x2) / D
+            if method == 1:
+                # Equation (34) for the likelihood L(t+1)
+                L[t+1] = (a*bt)**(-1/4) * E * L[t]
+            elif method == 2:
+                # Alternatively, use the log-likelihood, log of Equation (34)
+                L[t+1] = -1/4*np.log(a*bt) + x1 + x2 -np.log(D) + L[t]
+
+        # Negative likelihood is the last term.
+        # Since we maximize the likelihood, we minimize the negative likelihood.
+        likelihood = -np.real(L[T-1])
+        return likelihood/100000, v
+
+
+
+
+
+
+
+##############################################   Parameters Values     ##############################################
+r = 0.05            # risk-free interest rate
+q = 0.0             # dividend
+Tmax = 3            # longest maturity
+S_0 = 100             # initila asset price
+
+
+kappa = 0.2           # mean-reversion rate
+theta = 0.4    # long-run variance
+sigma = 0.25         # volatility of volatility
+v0 = 0.1      # initial variance
+rho = -0.25         # correlation of the bivariables
+numPaths = 1
+
+dt = 1/52         # size of time-step
+
+
+scheme='Milstein'
+negvar='Trunca'
+S, V, Vcount0 = Heston.simulate(scheme, negvar, numPaths, rho, S_0, v0, Tmax, kappa, theta, sigma, r, q)
+df_spot = pd.DataFrame(S).T
+df_vol=pd.DataFrame(V).T
+
+
+param = [kappa, theta, sigma, v0, rho ]
+method = 2 # Select method : 1 = Likelihood, 2 = Log-Likelihood.  Set the options.
+likelihood, v = Heston.likelihoodAW(param, np.log(S), r, q, dt, method=method)
+
+
+plt.plot(v)
+plt.plot(V)
+plt.show()
+
+
+from scipy.optimize import minimize, rosen, rosen_der
+
+
+bnds = ((0, 0.4),
+        (0, 2.0),
+        (0.05, 0.5),
+        (0.005, 2.0),
+        (-0.4, 0.4))
+x0 = [0.1, 0.05, 0.3, 0.1, 0.25]
+# res = minimize(rosen, x0, method='Nelder-Mead', tol=1e-6)
+min_func = lambda param: (Heston.likelihoodAW(param, np.log(S), r, q, dt, method=method))[0]
+
+res = minimize(min_func, x0, method='SLSQP', bounds=bnds)
+df_estimates = pd.concat([pd.DataFrame(res.x, columns=['AW estimate']), pd.DataFrame(param, columns=['Original values'])], axis=1)
+print(df_estimates)
+
+likelihood_2, estimated_v = Heston.likelihoodAW(res.x, np.log(S), r, q, dt, method=method)
+plt.plot(estimated_v)
+plt.plot(V)
+plt.show()
+
+
 
 
 # Utility function to pull out spot and vol paths as Pandas dataframes
@@ -26,7 +214,7 @@ def _generate_multi_paths_df(spot, seq, num_paths):
     return df_spot, df_vol
 
 
-def simulate_heston(today, timestep, length, N, spot, rate, v0, kappa, theta, sigma, rho):
+def simulate_heston_dont_use_quantlib(today, timestep, length, N, spot, rate, v0, kappa, theta, sigma, rho):
     # Set up the flat risk-free curves
     riskFreeCurve = ql.FlatForward(today, rate, ql.Actual365Fixed())
     flat_ts = ql.YieldTermStructureHandle(riskFreeCurve)

@@ -32,9 +32,6 @@ def backtest_gbm_i(df_x, horizon_w, backtesting_window_w, backtesting_frequency_
             params = calibrate_gbm(df_calibration, delta=1 / 52)
 
         initial_value = df_x.ix[bt_beginning_date.to_date()].to_frame().T
-        simulations = simulated_gbm_pointwise(initial_value[equity_name].values[0], params[equity_name], horizon_w, N)
-        # df_simulations.index = [el.to_date() for el in df_simulations.index]
-
         try:
             realisation_date = pd.Timestamp((df_x.ix[bt_beginning_date.to_date()].to_frame().T.index +
                                              datetime.timedelta(7*horizon_w))[0])
@@ -42,6 +39,8 @@ def backtest_gbm_i(df_x, horizon_w, backtesting_window_w, backtesting_frequency_
         except:
             print('Data point does not exists for  %s ' % realisation_date)
             continue
+        simulations = simulated_gbm_pointwise(initial_value[equity_name].values[0], params[equity_name], horizon_w, N)
+        # df_simulations.index = [el.to_date() for el in df_simulations.index]
 
         p = len(simulations[simulations[horizon_w] > realisation]) / len(simulations)
         p_list.append(p)
@@ -83,7 +82,7 @@ def backtest_gbm(calibration_config_path, backtest_config_path, visualize=True):
                                             ('critical_values_horizon_%s.csv' % str(horizon))),
                                             index_col=False)
             uniform = np.arange(0, len(df_critical_paths.T), 1) / len(df_critical_paths.T)
-            ks_metrics_dist = np.max(np.abs(np.sort(df_critical_paths) - uniform), axis=0)
+            ks_metrics_dist = np.max(np.abs(np.sort(df_critical_paths.T) - uniform[:, None]), axis=0)
             ks_metric = np.max(np.abs(np.sort(p_list) - uniform[:len(p_list)]))
 
             rgb_dict[horizon][equity] = {}
@@ -103,7 +102,7 @@ def backtest_gbm(calibration_config_path, backtest_config_path, visualize=True):
                 axes[1].plot(np.sort(p_list), color='red')
                 axes[1].set_title('sorted p-values of ideal paths', fontsize=24)
 
-                axes[2].hist(ks_metrics_dist, color='k')
+                axes[2].hist(ks_metrics_dist, color='k',histtype=u'stepfilled', density=True, bins=40)
                 axes[2].axvline(x=ks_metric, color='r', lw=5)
                 axes[2].set_title('One sided \nKS distances', fontsize=24)
 
@@ -113,7 +112,7 @@ def backtest_gbm(calibration_config_path, backtest_config_path, visualize=True):
                 if not exists(plots_path):
                     mkdir(plots_path)
                 plt.savefig(join(plots_path, equity))
-                # plt.show()
+                plt.show()
 
 
 
@@ -133,4 +132,4 @@ if __name__ == "__main__":
     calibration_config_path = 'C:/Users/eyyup/Desktop/packages/masters_thesis/static/settings/calibration_settings.json'
     backtest_config_path = 'C:/Users/eyyup/Desktop/packages/masters_thesis/static/settings/backtesting_configuration.json'
 
-    backtest_gbm(calibration_config_path, backtest_config_path, visualize=False)
+    backtest_gbm(calibration_config_path, backtest_config_path, visualize=True)
