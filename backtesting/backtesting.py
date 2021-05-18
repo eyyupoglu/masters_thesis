@@ -11,43 +11,44 @@ import seaborn as sns
 from os.path import join, exists
 from os import mkdir
 import matplotlib.style as style
-
 sns.set()
-
-from calibration.gbm import calibrate_gbm
+from calibration.gbm.gbm import calibrate_gbm
 from diffusion.gbm_process import simulate_gbm, simulated_gbm_pointwise
 
 
-def backtest_gbm_i(df_x, horizon_w, backtesting_window_w, backtesting_frequency_w,
-                   calibration_freq_w, equity_name, calibration_years,
-                   bt_beginning_date = ql.Date(7, 1, 2015), N=1000):
+def backtest_i(df_x, horizon_w, backtesting_window_w, backtesting_frequency_w,
+               calibration_freq_w, equity_name, calibration_years,
+               bt_beginning_date=ql.Date(7, 1, 2015), N=1000, model='GBM'):
     df_calibration = df_x[(bt_beginning_date - ql.Period(calibration_years, ql.Years)).to_date():
                           bt_beginning_date.to_date()]
-    params = calibrate_gbm(df_calibration, delta=1 / 52)
+    if model == 'GBM':
+        params = calibrate_gbm(df_calibration, delta=1 / 52)
+    elif model =='GBMJ':
+        params = calibrate_gbm(df_calibration, delta=1 / 52)
     p_list = []
     for i in range(backtesting_window_w):
-        df_calibration = df_x[(bt_beginning_date - ql.Period(calibration_years, ql.Years)).to_date():
-                              bt_beginning_date.to_date()]
+        df_calibration = df_x[(bt_beginning_date - ql.Period(calibration_years, ql.Years)).to_date(): bt_beginning_date.to_date()]
         if i % calibration_freq_w == 0:
-            params = calibrate_gbm(df_calibration, delta=1 / 52)
+            if model == 'GBM':
+                params = calibrate_gbm(df_calibration, delta=1 / 52)
+            elif model == 'GBMJ':
+                params = calibrate_gbm(df_calibration, delta=1 / 52)
 
         initial_value = df_x.ix[bt_beginning_date.to_date()].to_frame().T
         try:
-            realisation_date = pd.Timestamp((df_x.ix[bt_beginning_date.to_date()].to_frame().T.index +
-                                             datetime.timedelta(7*horizon_w))[0])
+            realisation_date = pd.Timestamp((df_x.ix[bt_beginning_date.to_date()].to_frame().T.index + datetime.timedelta(7*horizon_w))[0])
             realisation = df_x.xs(realisation_date)[equity_name]
         except:
             print('Data point does not exists for  %s ' % realisation_date)
             continue
-        simulations = simulated_gbm_pointwise(initial_value[equity_name].values[0], params[equity_name], horizon_w, N)
-        # df_simulations.index = [el.to_date() for el in df_simulations.index]
-
+        if model=='GBM':
+            simulations = simulated_gbm_pointwise(initial_value[equity_name].values[0], params[equity_name], horizon_w, N)
+        elif model=='GBMJ':
+            simulations = simulated_gbm_pointwise(initial_value[equity_name].values[0], params[equity_name], horizon_w, N)
         p = len(simulations[simulations[horizon_w] > realisation]) / len(simulations)
         p_list.append(p)
-
         bt_beginning_date = bt_beginning_date + ql.Period(backtesting_frequency_w, ql.Weeks)
         # print(bt_beginning_date)
-
     return p_list
 
 
@@ -70,14 +71,15 @@ def backtest_gbm(calibration_config_path, backtest_config_path, visualize=True):
     for horizon in dict_bt['backtesting_horizon_w']:
         rgb_dict[horizon] = {}
         for equity in dict_cal['risk_factors']['equity']['scope']:
-            p_list = backtest_gbm_i(df, horizon,
-                                       dict_bt['backtesting_window_w'],
-                                       dict_bt['backtesting_frequency_w'],
-                                       dict_bt['calibration_freq_w'],
-                                       equity,
-                                        dict_cal['general_settings']['data_length_y'],
-                                       N=dict_bt['simulation_amount'],
-                                       bt_beginning_date=ql.Date(7, 1, 2015))
+            p_list = backtest_i(df, horizon,
+                                dict_bt['backtesting_window_w'],
+                                dict_bt['backtesting_frequency_w'],
+                                dict_bt['calibration_freq_w'],
+                                equity,
+                                dict_cal['general_settings']['data_length_y'],
+                                N=dict_bt['simulation_amount'],
+                                bt_beginning_date=ql.Date(7, 1, 2015),
+                                model=dict_cal['risk_factors']['equity']['model'])
             df_critical_paths = pd.read_csv(join(dict_bt['back_testing_critical_values_path'],
                                             ('critical_values_horizon_%s.csv' % str(horizon))),
                                             index_col=False)

@@ -3,41 +3,16 @@ import scipy.stats as ss
 import pandas as pd
 import matplotlib.pyplot as plt
 
-class Merton_process():
-    """
-    Class for the Merton process:
-    r = risk free constant rate
-    sig = constant diffusion coefficient
-    lam = jump activity
-    muJ = jump mean
-    sigJ = jump standard deviation
-    """
 
-    def __init__(self, r=0.1, sig=0.2, lam=0.8, muJ=0, sigJ=0.5):
-        self.r = r
-        self.lam = lam
-        self.muJ = muJ
-        if (sig < 0 or sigJ < 0):
-            raise ValueError("sig and sigJ must be positive")
-        else:
-            self.sig = sig
-            self.sigJ = sigJ
+def simulate_gbmj(S, maturity, steps, lambda_, sigma_y_, sigma_, mu_y_, mu_star):
+    dt = maturity/steps
+    M_simul = np.zeros(steps)
+    jumps = np.zeros(steps)
+    M_simul[0] = S
+    for i in np.arange(1, steps):
+        jumpnb = np.random.poisson( lambda_*dt, size=1)
+        jump = np.random.normal(mu_y_ * ( jumpnb - lambda_ * dt ), sqrt( jumpnb ) * sigma_y_, size=1)
+        jumps[i] = jump
+        M_simul[i] = M_simul[i-1] * np.exp(mu_star * dt + sigma_ * sqrt( dt )* np.random.normal(0, 1, 1) + jump)
+    return jumps, M_simul
 
-        # moments
-        self.var = self.sig ** 2 + self.lam * self.sigJ ** 2 + self.lam * self.muJ ** 2
-        self.skew = self.lam * (3 * self.sigJ ** 2 * self.muJ + self.muJ ** 3) / self.var ** (1.5)
-        self.kurt = self.lam * (3 * self.sigJ ** 3 + 6 * self.sigJ ** 2 * self.muJ ** 2 + self.muJ ** 4) / self.var ** 2
-
-    def exp_RV(self, S0, T, N):
-        m = self.lam * (np.exp(self.muJ + (self.sigJ ** 2) / 2) - 1)  # coefficient m
-        W = ss.norm.rvs(0, 1, N)  # The normal RV vector
-        P = ss.poisson.rvs(self.lam * T, size=N)  # Poisson random vector (number of jumps)
-        Jumps = np.asarray([ss.norm.rvs(self.muJ, self.sigJ, ind).sum() for ind in P])  # Jumps vector
-        S_T = S0 * np.exp(
-            (self.r - 0.5 * self.sig ** 2 - m) * T + np.sqrt(T) * self.sig * W + Jumps)  # Martingale exponential Merton
-        return S_T.reshape((N, 1))
-
-
-obj = Merton_process(r=0.2, lam=0.1)
-pd.DataFrame(obj.exp_RV(100, 4, 200)).plot()
-plt.show()
