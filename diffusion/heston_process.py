@@ -11,19 +11,23 @@ from math import exp, log, sqrt, pi
 import pandas as pd
 import time
 
-start_time = time.time()
+from scipy.optimize import minimize, rosen, rosen_der
+
+
+
 
 
 class Heston(object):
     def __init__(self):
         pass
+
     @staticmethod
-    def simulate(scheme, negvar, numPaths, rho, S_0, V_0, T, kappa, theta, sigma, r, q):
-        num_time = int(T / dt)
+    def simulate(scheme, negvar, numPaths, S_0, maturity, dt, r, q, kappa, theta, sigma, v0, rho):
+        num_time = int(maturity / dt)
         S = np.zeros((num_time + 1, numPaths))
         S[0, :] = S_0
         V = np.zeros((num_time + 1, numPaths))
-        V[0, :] = V_0
+        V[0, :] = v0
         Vcount0 = 0
         for i in range(numPaths):
             for t_step in range(1, num_time + 1):
@@ -49,10 +53,6 @@ class Heston(object):
                 ################         simluations for asset price S              ########
                 S[t_step, i] = S[t_step - 1, i] * np.exp((r - q - V[t_step - 1, i] / 2) * dt + sqrt(V[t_step - 1, i]) * sqrt(dt) * Zs)
         return S, V, Vcount0
-
-    @staticmethod
-    def calibrate():
-        pass
 
     @staticmethod
     def likelihoodAW(param, x, r, q, dt, method):
@@ -94,7 +94,7 @@ class Heston(object):
         # Construction the likelihood for time t = 1 through t = T
         for t in range(T-1):
             # Stock price increment
-            dx  = x[t + 1] - x[t]
+            dx = x[t + 1] - x[t]
             # Equations (31) and (32)
             B = -alpha*dt - rho*sigma*(dx-mu*dt)
             C = alpha**2*dt**2 + 2*rho*sigma*alpha*dt*(dx-mu*dt) + sigma**2*(dx-mu*dt)**2 - 2*v[t]**2*a*sigma**2*(1-rho**2)*dt
@@ -130,66 +130,38 @@ class Heston(object):
         likelihood = -np.real(L[T-1])
         return likelihood/100000, v
 
+    @staticmethod
+    def calibrate_i(S, dt):
+        bnds = ((0, 0.4),
+                (0, 2.0),
+                (0.05, 0.5),
+                (0.005, 2.0),
+                (-0.4, 0.4))
+        x0 = [0.1, 0.05, 0.3, 0.1, 0.25]
+        r = 0; q = 0.0
+
+        method = 2  # Select method : 1 = Likelihood, 2 = Log-Likelihood.  Set the options.
+        min_func = lambda param: (Heston.likelihoodAW(param, np.log(S), r, q, dt, method=method))[0]
+        res = minimize(min_func, x0, method='SLSQP', bounds=bnds)
+        param_list = res.x.tolist()
+        likelihood_2, estimated_v = Heston.likelihoodAW(res.x, np.log(S), r, q, dt, method=method)
+        params = {"kappa": param_list[0], "theta": param_list[1], "sigma":param_list[2],
+                  "v0": param_list[3], "rho": param_list[4]}
+        return params, estimated_v
+
+    @staticmethod
+    def calibrate(data_frame, dt):
+        params_dict = {}
+        for isin in data_frame.columns:
+            S = data_frame[[isin]].values
+            params, estimated_v = Heston.calibrate_i(S, dt)
+            params_dict[isin] = params
+        return params_dict
 
 
 
 
 
-
-##############################################   Parameters Values     ##############################################
-r = 0.05            # risk-free interest rate
-q = 0.0             # dividend
-Tmax = 3            # longest maturity
-S_0 = 100             # initila asset price
-
-
-kappa = 0.2           # mean-reversion rate
-theta = 0.4    # long-run variance
-sigma = 0.25         # volatility of volatility
-v0 = 0.1      # initial variance
-rho = -0.25         # correlation of the bivariables
-numPaths = 1
-
-dt = 1/52         # size of time-step
-
-
-scheme='Milstein'
-negvar='Trunca'
-S, V, Vcount0 = Heston.simulate(scheme, negvar, numPaths, rho, S_0, v0, Tmax, kappa, theta, sigma, r, q)
-df_spot = pd.DataFrame(S).T
-df_vol=pd.DataFrame(V).T
-
-
-param = [kappa, theta, sigma, v0, rho ]
-method = 2 # Select method : 1 = Likelihood, 2 = Log-Likelihood.  Set the options.
-likelihood, v = Heston.likelihoodAW(param, np.log(S), r, q, dt, method=method)
-
-
-plt.plot(v)
-plt.plot(V)
-plt.show()
-
-
-from scipy.optimize import minimize, rosen, rosen_der
-
-
-bnds = ((0, 0.4),
-        (0, 2.0),
-        (0.05, 0.5),
-        (0.005, 2.0),
-        (-0.4, 0.4))
-x0 = [0.1, 0.05, 0.3, 0.1, 0.25]
-# res = minimize(rosen, x0, method='Nelder-Mead', tol=1e-6)
-min_func = lambda param: (Heston.likelihoodAW(param, np.log(S), r, q, dt, method=method))[0]
-
-res = minimize(min_func, x0, method='SLSQP', bounds=bnds)
-df_estimates = pd.concat([pd.DataFrame(res.x, columns=['AW estimate']), pd.DataFrame(param, columns=['Original values'])], axis=1)
-print(df_estimates)
-
-likelihood_2, estimated_v = Heston.likelihoodAW(res.x, np.log(S), r, q, dt, method=method)
-plt.plot(estimated_v)
-plt.plot(V)
-plt.show()
 
 
 
@@ -229,3 +201,37 @@ def simulate_heston_dont_use_quantlib(today, timestep, length, N, spot, rate, v0
     df_spot, df_vol = _generate_multi_paths_df(spot, seq, N)
     return df_spot, df_vol
 
+if __name__ == "__main__":
+    ###########   SIMULATION    ##################   Parameters Values     ##############################################
+    start_time = time.time()
+    r = 0.05  # risk-free interest rate
+    q = 0.0  # dividend
+    maturity = 3  # longest maturity
+    dt = 1 / 252  # size of time-step
+    S_0 = 100  # initila asset price
+
+    kappa = 0.2  # mean-reversion rate
+    theta = 0.4  # long-run variance
+    sigma = 0.25  # volatility of volatility
+    v0 = 0.1  # initial variance
+    rho = -0.25  # correlation of the bivariables
+    param_original = [kappa, theta, sigma, v0, rho]
+    numPaths = 1
+
+    scheme = 'Milstein'
+    negvar = 'Trunca'
+    S, V, Vcount0 = Heston.simulate(scheme, negvar, numPaths, S_0, maturity, dt, r, q, kappa, theta, sigma, v0, rho)
+    df_spot = pd.DataFrame(S).T
+    df_vol = pd.DataFrame(V).T
+
+    param_estimated, estimated_v = Heston.calibrate_i(S)
+
+    df_estimates = pd.concat(
+        [pd.DataFrame(param_estimated, columns=['AW estimate']),
+         pd.DataFrame(param_original, columns=['Original values'])],
+        axis=1)
+    print(df_estimates)
+    plt.plot(estimated_v)
+    plt.plot(V)
+    plt.show()
+    print()

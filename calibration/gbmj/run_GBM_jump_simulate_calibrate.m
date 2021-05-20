@@ -33,9 +33,9 @@ qqplot(log(S(2:end, end)) - log(S(1:end-1, end)))
 disp([ mu_star_est, sigma__est, lambda__est, mu_y__est, sigma_y__est ])
 disp([mu_star, sigma_,  lambda_, mu_y_, sigma_y_])
 
-
-[S, jumps] = JGBM_simulation( N_Sim,T , dt , [mu_star_est, sigma__est, lambda__est, mu_y__est, sigma_y__est] ,  S0 );
+% 
+% [S, jumps] = JGBM_simulation( N_Sim,T , dt , [mu_star_est, sigma__est, lambda__est, mu_y__est, sigma_y__est] ,  S0 );
+% % plot(S)
+% figure
+% % plot(jumps(1, 1:end))
 % plot(S)
-figure
-% plot(jumps(1, 1:end))
-plot(S)
