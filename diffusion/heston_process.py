@@ -56,6 +56,7 @@ class Heston(object):
 
     @staticmethod
     def likelihoodAW(param, x, r, q, dt, method):
+        # implementation of Atiya-wall article, taken from the book called "Heston model and its extensions in matlab"
         kappa = param[0]
         theta = param[1]
         sigma = param[2]
@@ -158,6 +159,207 @@ class Heston(object):
             params_dict[isin] = params
         return params_dict
 
+    @staticmethod
+    def ekf_step_i(para,z, choice, v0,var_s,var_v,P0,kappa_set,kappa_theta_set,sigma_set,ro_set,mu_set,mu,delta):
+        # implementation of article "Parameter Estimates of Heston Stochastic Volatility
+        # Model with MLE and Consistent EKF Algorithm" - table 1
+        P_design_old = 2
+
+        kappa = para[0]
+        ka_the = para[1]
+        sigma = para[2]
+        ro = para[3]
+
+        kappa_upper = max(abs(kappa_set))
+        kappa_theta_upper = max(abs(kappa_theta_set))
+        ro_upper = max(abs(ro_set))
+        sigma_upper = max(abs(sigma_set))
+        mu_upper = max(abs(mu_set))
+
+        kappa_lower = min(abs(kappa_set))
+        kappa_theta_lower = min(abs(kappa_theta_set))
+        ro_lower = min(abs(ro_set))
+        sigma_lower = min(abs(sigma_set))
+        mu_lower = min(abs(mu_set))
+        one_min_ro2_max = max(1 - ro_set ** 2)
+
+        Q = np.diag([var_s, var_v]) ** 2
+
+
+        F = 1 - kappa * delta
+        L = np.array([0, sigma * sqrt(max(v0 * delta, 0))])
+
+        if choice == 1:
+
+            P_bar = P0 * (1 - kappa_lower * delta) ** 2 + delta ** 2 * kappa_theta_upper ** 2 + sigma_upper ** 2 * max(
+                v0 * delta, 0) * Q[1, 1]
+            v_bar = max(v0 + ka_the * delta - kappa * v0 * delta, 0)
+            H = -0.5 * delta
+            M = np.array([sqrt(max((1 - ro ** 2) * v_bar * delta, 0)), ro * sqrt(max(v_bar * delta, 0))])
+
+            K = (P_bar * H + L @  M.T) * (H * P_bar * H + M @ M.T + H*L @ M.T + M @ L.T * H)**(-1)
+            v = v_bar + K * (z - (mu-0.5 * v_bar) * delta)
+
+            P0 = (1 + K * 0.5 * delta) ** 2 * P_bar + K ** 2 * delta ** 2 * (mu_upper - mu_lower) ** 2 + \
+                 2 * K ** 2 * max(v_bar * delta, 0) * ((1 - ro ** 2) * Q[0, 0] + ro ** 2 * Q[1,1])
+        else:
+            P_bar = F * P0 * F + L @ Q @ L.T
+
+            v_bar = max(v0 + ka_the * delta - kappa * v0 * delta, 0)
+            H = -0.5 * delta
+            M = np.array([sqrt((1 - ro ** 2) * v_bar * delta), ro * sqrt(v_bar * delta)])
+            K = (P_bar * H + L @ M.T) * (H * P_bar * H + M @ Q @ M.T + H * L @ Q @ M.T + M @ Q @ L.T * H)**(-1)
+            v = v_bar+K * (z- (mu-0.5 * v_bar) * delta)
+            P0 = P_bar - K * (H * P_bar + M @ Q @ L.T)
+
+
+        output_v = max(v, 0.00001)
+
+        return output_v, P0
+
+    @staticmethod
+    def estimate_heston_given_volatilities(vols, spots, dt):
+        # implementation of article "Parameter Estimates of Heston Stochastic Volatility
+        # Model with MLE and Consistent EKF Algorithm"- equation 10
+        n = len(vols)
+        dt = dt
+        P_numerator = ((vols.shift(1) * vols) ** (1 / 2)).sum() / n - 1 / (n ** 2) * (
+                (vols / vols.shift(1)) ** (1 / 2)).sum() * vols.shift(1).sum()
+        P_denumerator = dt / 2 - dt / 2 * (1 / n ** 2) * (1 / vols.shift(1)).sum() * vols.shift(1).sum()
+        P = P_numerator / P_denumerator
+
+        kappa_est = 2 / dt * (
+                1 + P * dt / 2 * 1 / n * (1 / vols.shift(1)).sum() - 1 / n * ((vols / vols.shift(1)) ** (1 / 2)).sum())
+        sigma_est = (4 / dt / n * ((vols ** (1 / 2) - vols.shift(1) ** (1 / 2) - dt / (2 * vols.shift(1) ** (1 / 2)) * (
+                P - kappa_est * vols.shift())) ** 2).sum()) ** (1 / 2)
+        theta_est = (P + 1 / 4 * sigma_est ** 2) / kappa_est
+
+        sigma_gbm_est = np.log(spots).diff().std() / np.sqrt(dt)
+        r = ((np.log(spots).diff()).mean(axis=0) * (1 / dt) + (sigma_gbm_est ** 2) / 2)
+
+        dW1 = (np.log(spots) - np.log(spots.shift(1)) - (r - 1 / 2 * vols.shift(1)) * dt) / vols.shift(1) ** (1 / 2)
+        dW2 = (vols - vols.shift(1) - kappa_est * (theta_est - vols.shift(1)) * dt) / (
+                    sigma_est * vols.shift(1) ** (1 / 2))
+        ro = 1 / n / dt * (dW1 * dW2).sum()
+
+        return r, kappa_est, sigma_est, theta_est, ro
+
+    @staticmethod
+    def calibrate_ekf(S):
+        delta = 1 / 252
+        Y = np.log(S)
+        z_m = Y[1:] - Y[:-1]
+
+        mu = 0.05
+        r = mu
+        V10 = 0.01
+
+        var_s = 1
+        var_v = 1
+        P0 = 0.5
+
+        kappa_ini = 1
+        theta_ini = 0.03
+        kappa_theta_ini = kappa_ini * theta_ini
+        sigma_ini = 0.2
+
+        kappa_lb = 0.1
+        kappa_ub = 2
+
+        kappa_theta_lb = 0.002
+        kappa_theta_ub = 0.7
+        sigma_lb = 0.1
+        sigma_ub = 0.6
+        ro_lb = -0.6
+        ro_ub = 0.6
+        kappa_theta_set = np.array([kappa_theta_lb, kappa_theta_ub])
+        kappa_set = np.array([kappa_lb, kappa_ub])
+        sigma_set = np.array([sigma_lb, sigma_ub])
+        ro_set = np.array([ro_lb, ro_ub])
+        mu_set = np.array([mu, mu])
+        step_set = 20
+
+        choice1 = 1
+        v = V10
+
+        lb = np.array([kappa_lb, kappa_theta_lb, sigma_lb, ro_lb])
+        up = np.array([kappa_ub, kappa_theta_ub, sigma_ub, ro_ub])
+
+
+        ro_ini = 0.2
+        parax_final1 = np.zeros((len(z_m), 4))
+
+        V_k1 = np.zeros(len(z_m))
+        P_k1 = np.zeros(len(z_m))
+        V_k2 = np.zeros(len(z_m))
+        P_k2 = np.zeros(len(z_m))
+
+        parax_final1[0, :] = np.array([kappa_ini, kappa_theta_ini, sigma_ini, ro_ini])
+
+        V_k1[0] = V10
+        P_k1[0] = P0
+        V_k2[0] = V10
+        P_k2[0] = P0
+
+
+        for k in range(1, len(z_m)):
+            V_k1[k], P_k1[k] = Heston.ekf_step_i(parax_final1[k-1, :], z_m[k], choice1, V_k1[k - 1], var_s, var_v,
+                                                                         P_k1[k - 1], kappa_set, kappa_theta_set,
+                                                                         sigma_set, ro_set, mu_set, mu, delta)
+            V_k1_ba = np.array([*V_k1[:k-1].tolist(), V_k1[k]])
+            if V_k1[k] > 0.2:
+                V_k1_ba = np.array([*V_k1[:k - 1].tolist(), 0.1])
+            [kappa_ba_new1, theta_ba_new1, sigma_ba_new1] = Heston.SQRT_CIR_esti(V_k1_ba, delta)
+
+            parax_final1[k, 0] = kappa_ba_new1
+            parax_final1[k, 1] = kappa_ba_new1 * theta_ba_new1
+            parax_final1[k, 2] = sigma_ba_new1
+            parax_final1[k, 3] = ro_ini
+
+        plt.plot(parax_final1[:, 0])
+        plt.show()
+
+        plt.plot(parax_final1[:, 1] / parax_final1[:, 0])
+        plt.show()
+
+        plt.plot(parax_final1[:, 2])
+        plt.show()
+
+        plt.plot(parax_final1[:, 3])
+        plt.show()
+
+        plt.plot(V_k1)
+        plt.show()
+
+        plt.plot(P_k1)
+        plt.show()
+        return parax_final1[-1, :]
+
+    @staticmethod
+    def SQRT_CIR_esti(vReal, dt):
+        d1 = 0
+        d2 = 0
+        d3 = 0
+        d4 = 0
+        n = len(vReal)
+        for i in range(1, n):
+            d1 = d1 + sqrt(vReal[i - 1] * vReal[i])
+            d2 = d2 + sqrt(vReal[i] / vReal[i - 1])
+            d3 = d3 + vReal[i - 1]
+            d4 = d4 + (1 / vReal[i - 1])
+
+        P = (d1 - (1 / (n)) * d2 * d3) / (dt * (n) * 0.5 - dt / (2 * (n)) * d4 * d3)
+        kappa = (1 + P * dt / (2 * (n)) * d4 - d2 / (n)) * 2 / dt
+        d5 = 0
+        for j in range(1, n):
+            d5 = d5 + (sqrt(vReal[j]) - sqrt(vReal[j - 1]) - dt * (P - kappa * vReal[j - 1]) / (2 * sqrt(vReal[j - 1]))) ** 2
+
+        sigma2 = 4 * d5 / ((n) * dt)
+        sigma = sqrt(sigma2)
+        theta = (P + 1 / 4 * sigma2) / kappa
+        return kappa, theta, sigma
+
+
 
 
 
@@ -204,14 +406,14 @@ def simulate_heston_dont_use_quantlib(today, timestep, length, N, spot, rate, v0
 if __name__ == "__main__":
     ###########   SIMULATION    ##################   Parameters Values     ##############################################
     start_time = time.time()
-    r = 0.05  # risk-free interest rate
+    r = 0  # risk-free interest rate
     q = 0.0  # dividend
     maturity = 3  # longest maturity
-    dt = 1 / 252  # size of time-step
+    dt = 1 / 52  # size of time-step
     S_0 = 100  # initila asset price
 
-    kappa = 0.2  # mean-reversion rate
-    theta = 0.4  # long-run variance
+    kappa = 2  # mean-reversion rate
+    theta = 0.1  # long-run variance
     sigma = 0.25  # volatility of volatility
     v0 = 0.1  # initial variance
     rho = -0.25  # correlation of the bivariables
@@ -221,6 +423,14 @@ if __name__ == "__main__":
     scheme = 'Milstein'
     negvar = 'Trunca'
     S, V, Vcount0 = Heston.simulate(scheme, negvar, numPaths, S_0, maturity, dt, r, q, kappa, theta, sigma, v0, rho)
+
+    # plt.plot(S)
+    # plt.show()
+    #
+    # plt.plot(V)
+    # plt.show()
+    params_ekf = Heston.calibrate_ekf(S)
+
     df_spot = pd.DataFrame(S).T
     df_vol = pd.DataFrame(V).T
 

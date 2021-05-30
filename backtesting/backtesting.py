@@ -9,11 +9,12 @@ from docutils.nodes import legend
 from pandas import ExcelWriter
 import seaborn as sns
 from os.path import join, exists
-from os import mkdir
+from os import makedirs
 import matplotlib.style as style
 sns.set()
 from diffusion.gbm_process import simulate_gbm, GBM
 from diffusion.heston_process import Heston
+from diffusion.merton_jump_process import JumpDiffusion
 
 
 def backtest_i(df_x, horizon_w, backtesting_window_w, backtesting_frequency_w,
@@ -28,10 +29,13 @@ def backtest_i(df_x, horizon_w, backtesting_window_w, backtesting_frequency_w,
         if i % calibration_freq_w == 0:
             if model == 'GBM':
                 params = GBM.calibrate_gbm(df_calibration, dt=dt)
-            elif model == 'GBMJ':
+            elif model == 'GBM_no_drift':
                 params = GBM.calibrate_gbm(df_calibration, dt=dt)
+                params[equity_name]['mu'] = 0
             elif model == 'Heston':
                 params = Heston.calibrate(df_calibration, dt=dt)
+            elif model == 'JumpDiffusion':
+                params = JumpDiffusion.calibrate(df_calibration, dt=dt)
         initial_value = df_x.ix[bt_beginning_date.to_date()].to_frame().T
         try:
             realisation_date = pd.Timestamp((df_x.ix[bt_beginning_date.to_date()].to_frame().T.index + datetime.timedelta(7*horizon_w))[0])
@@ -39,16 +43,16 @@ def backtest_i(df_x, horizon_w, backtesting_window_w, backtesting_frequency_w,
         except:
             print('Data point does not exists for  %s ' % realisation_date)
             break
-        if model == 'GBM':
+        if model == 'GBM' or model == 'GBM_no_drift':
             simulations = GBM.simulate_gbm_pointwise(initial_value[equity_name].values[0],
                                                      params[equity_name],
                                                      horizon_w,
                                                      N)
-        elif model == 'GBMJ':
-            simulations = GBM.simulate_gbm_pointwise(initial_value[equity_name].values[0],
-                                                     params[equity_name],
-                                                     horizon_w,
-                                                     N)
+        elif model == 'JumpDiffusion':
+            simulations, jumps = JumpDiffusion.simulate(N, initial_value[equity_name].values[0], dt, horizon_w/52, params[equity_name]['estMuD'],
+                                                 params[equity_name]['estVol'], params[equity_name]['estLambda'],
+                                                 params[equity_name]['estQ1'], params[equity_name]['estQ2'])
+            simulations = pd.DataFrame(data=simulations[-1, :], columns=[horizon_w])
         elif model == 'Heston':
             r = 0; q = 0.0
             scheme = 'Milstein'
@@ -126,7 +130,7 @@ def backtest_gbm(calibration_config_path, backtest_config_path, visualize=True):
 
                 plots_path = join(join(dict_cal['general_settings']['output_folder'], 'plots'), str(horizon))
                 if not exists(plots_path):
-                    mkdir(plots_path)
+                    makedirs(plots_path)
                 plt.savefig(join(plots_path, equity))
                 plt.show()
 

@@ -1,7 +1,7 @@
 function [ mu_star, sigma_, lambda_, mu_y_, sigma_y_ ] = JGBM_calibration( data ,dt , params )
     returns = price2ret(data);
     dataLength= length (data);
-    options = optimset ( 'MaxFunEvals', 1000000 , 'MaxIter', 1000000);
+    options = optimset ( 'MaxFunEvals', 100000 , 'MaxIter', 100000);
     params = fminsearch( @FT_JGBM_LL , params , options );
     mu_star = params (1); 
     sigma_ = abs( params (2)); 

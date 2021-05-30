@@ -1,28 +1,7 @@
 import numpy as np
 
 
-def estimate_heston(vols, spots, dt):
-    n = len(vols)
-    dt = dt
-    P_numerator = ((vols.shift(1) * vols) ** (1 / 2)).sum() / n - 1 / (n ** 2) * (
-                (vols / vols.shift(1)) ** (1 / 2)).sum() * vols.shift(1).sum()
-    P_denumerator = dt / 2 - dt / 2 * (1 / n ** 2) * (1 / vols.shift(1)).sum() * vols.shift(1).sum()
-    P = P_numerator / P_denumerator
 
-    kappa_est = 2 / dt * (
-                1 + P * dt / 2 * 1 / n * (1 / vols.shift(1)).sum() - 1 / n * ((vols / vols.shift(1)) ** (1 / 2)).sum())
-    sigma_est = (4 / dt / n * ((vols ** (1 / 2) - vols.shift(1) ** (1 / 2) - dt / (2 * vols.shift(1) ** (1 / 2)) * (
-                P - kappa_est * vols.shift())) ** 2).sum()) ** (1 / 2)
-    theta_est = (P + 1 / 4 * sigma_est ** 2) / kappa_est
-
-    sigma_gbm_est = np.log(spots).diff().std() / np.sqrt(dt)
-    r = ((np.log(spots).diff()).mean(axis=0) * (1 / dt) + (sigma_gbm_est ** 2) / 2)
-
-    dW1 = (np.log(spots) - np.log(spots.shift(1)) - (r - 1 / 2 * vols.shift(1)) * dt) / vols.shift(1) ** (1 / 2)
-    dW2 = (vols - vols.shift(1) - kappa_est * (theta_est - vols.shift(1)) * dt) / (sigma_est * vols.shift(1) ** (1 / 2))
-    ro = 1 / n / dt * (dW1 * dW2).sum()
-
-    return r, kappa_est, sigma_est, theta_est, ro
 
 
 from mpl_toolkits.mplot3d import Axes3D

@@ -16,7 +16,8 @@
          "US1011371077", "US1101221083", "DE0007100000", "DE0007164600", "DE0007236101", "DE0008404005",
        "DE000BASF111", "DE000BAY0017", "DE000ENAG999", "DE000ZAL1111",
        "DK0010268606", "DK0010272202"],
-      "model": "Heston"
+      "model": "JumpDiffusion" ,
+      "model_options" : ["Heston", "GBM_no_drift", "GBM", "JumpDiffusion"]
     }
   }
 }

@@ -176,11 +176,11 @@ kapta_all_CEKF=parax_final1(:,2);
 sigma_all_CEKF=parax_final1(:,3);
 ro_all_CEKF=parax_final1(:,4);
 
-% stackedplot(parax_final1);
-% figure 
-% yData = linspace(1,length(V_k1),length(V_k1));
-% plot(yData, V_k1, 'r');
-% plot(yData, V(2:end), 'k', yData, V_k1, 'r');
+stackedplot(parax_final1);
+figure 
+yData = linspace(1,length(V_k1),length(V_k1));
+plot(yData, V_k1, 'r');
+plot(yData, V(2:end), 'k', yData, V_k1, 'r');
 
 % kappa_all_EKF=parax_final2(:,1);
 % kapta_all_EKF=parax_final2(:,2);

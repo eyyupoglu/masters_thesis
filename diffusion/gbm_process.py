@@ -17,6 +17,17 @@ class GBM(object):
         return pd.DataFrame(data=simulated, columns=[horizon])
 
     @staticmethod
+    def gen_paths(S0, r, sigma, T, M, I):
+        dt = float(T) / M
+        paths = np.zeros((M + 1, I), np.float64)
+        paths[0] = S0
+        for t in range(1, M + 1):
+            rand = np.random.standard_normal(I)
+            paths[t] = paths[t - 1] * np.exp((r - 0.5 * sigma ** 2) * dt +
+                                             sigma * np.sqrt(dt) * rand)
+        return paths
+
+    @staticmethod
     def calibrate_gbm(data_frame, dt):
         df_sigma = pd.DataFrame(np.log(data_frame).diff().std() / np.sqrt(dt)).rename(
             columns={0: 'sigma'})
