@@ -129,7 +129,7 @@ def simulate_gbmj(S, maturity, steps, lambda_, sigma_y_, sigma_, mu_y_, mu_star)
 
 
 if __name__ == "__main__":
-    numPaths = 100
+    numPaths = 1000
     Years = 3
     dt = 1 / 252
     Szero = 50
@@ -143,7 +143,38 @@ if __name__ == "__main__":
     params = JumpDiffusion.calibrate(pd.DataFrame(S), dt)
     df_res = pd.DataFrame(params)
     print(df_res)
-
     df_orig = pd.DataFrame([[mu, vol, lambda_, q1, q2] ], columns=['mu', 'vol', 'lambda_', 'q1', 'q2'],
                  index=['original'])
+
     print(df_orig)
+
+    df_res.T.hist(bins=30, figsize=(15, 12))
+    plt.show()
+
+    plt.style.use('seaborn-white')
+    fig, axes = plt.subplots(3, 2, figsize=(15, 12))
+    axes[0, 0].hist(df_res.T['estMuD'], color='k', bins=30)
+    axes[0, 0].axvline(mu, color='r', linestyle='-', lw=5)
+    axes[0, 0].set_title('Mu', fontsize=24)
+
+    axes[0, 1].hist(df_res.T['estVol'], color='k', bins=30)
+    axes[0, 1].axvline(vol, color='r', linestyle='-', lw=5)
+    axes[0, 1].set_title('Sigma', fontsize=24)
+
+    axes[1, 0].hist(df_res.T['estQ2'], color='k', bins=30)
+    axes[1, 0].axvline(q2, color='r', linestyle='-', lw=5)
+    axes[1, 0].set_title('Q2', fontsize=24)
+
+    axes[1, 1].hist(df_res.T['estQ1'], color='k', bins=30)
+    axes[1, 1].axvline(q1, color='r', linestyle='-', lw=5)
+    axes[1, 1].set_title('Q1', fontsize=24)
+
+    axes[2, 0].hist(df_res.T['estLambda'], color='k', bins=30)
+    axes[2, 0].axvline(lambda_, color='r', linestyle='-', lw=5)
+    axes[2, 0].set_title('Lambda', fontsize=24)
+    plt.show()
+
+
+
+
+

@@ -288,6 +288,7 @@ class Heston(object):
 
         ro_ini = 0.2
         parax_final1 = np.zeros((len(z_m), 4))
+        parax_final2 = np.zeros((len(z_m), 4))
 
         V_k1 = np.zeros(len(z_m))
         P_k1 = np.zeros(len(z_m))
@@ -295,6 +296,7 @@ class Heston(object):
         P_k2 = np.zeros(len(z_m))
 
         parax_final1[0, :] = np.array([kappa_ini, kappa_theta_ini, sigma_ini, ro_ini])
+        parax_final2[0, :] = np.array([kappa_ini, kappa_theta_ini, sigma_ini, ro_ini])
 
         V_k1[0] = V10
         P_k1[0] = P0
@@ -316,24 +318,15 @@ class Heston(object):
             parax_final1[k, 2] = sigma_ba_new1
             parax_final1[k, 3] = ro_ini
 
-        plt.plot(parax_final1[:, 0])
-        plt.show()
+            # if k > 2:
+            #     [r, kappa_ba_new2, sigma_ba_new2, theta_ba_new2, ro2] = Heston.estimate_heston_mine(
+            #         pd.DataFrame(V_k1_ba), pd.DataFrame(S[:k]), delta)
+            #     parax_final2[k, 0] = kappa_ba_new2
+            #     parax_final2[k, 1] = kappa_ba_new2 * theta_ba_new2
+            #     parax_final2[k, 2] = sigma_ba_new2
+            #     parax_final2[k, 3] = ro2
 
-        plt.plot(parax_final1[:, 1] / parax_final1[:, 0])
-        plt.show()
-
-        plt.plot(parax_final1[:, 2])
-        plt.show()
-
-        plt.plot(parax_final1[:, 3])
-        plt.show()
-
-        plt.plot(V_k1)
-        plt.show()
-
-        plt.plot(P_k1)
-        plt.show()
-        return parax_final1[-1, :]
+        return parax_final1, V_k1, P_k1
 
     @staticmethod
     def SQRT_CIR_esti(vReal, dt):
@@ -357,7 +350,41 @@ class Heston(object):
         sigma2 = 4 * d5 / ((n) * dt)
         sigma = sqrt(sigma2)
         theta = (P + 1 / 4 * sigma2) / kappa
+
         return kappa, theta, sigma
+
+    @staticmethod
+    def estimate_heston_mine(vols, spots, dt):
+        n = len(vols)
+        dt = dt
+        P_numerator = ((vols.shift(1) * vols) ** (1 / 2)).sum() / n - 1 / (n ** 2) * (
+                    (vols / vols.shift(1)) ** (1 / 2)).sum() * vols.shift(1).sum()
+        P_denumerator = dt / 2 - dt / 2 * (1 / n ** 2) * (1 / vols.shift(1)).sum() * vols.shift(1).sum()
+        P = P_numerator / P_denumerator
+
+        kappa_est = 2 / dt * (1 + P * dt / 2 * 1 / n * (1 / vols.shift(1)).sum() - 1 / n * (
+                    (vols / vols.shift(1)) ** (1 / 2)).sum())
+        sigma_est = (4 / dt / n * ((vols ** (1 / 2) - vols.shift(1) ** (1 / 2) - dt / (2 * vols.shift(1) ** (1 / 2)) * (
+                    P - kappa_est * vols.shift())) ** 2).sum()) ** (1 / 2)
+        theta_est = (P + 1 / 4 * sigma_est ** 2) / kappa_est
+
+        sigma_gbm_est = np.log(spots).diff().std() / np.sqrt(dt)
+        r = ((np.log(spots).diff()).mean(axis=0) * (1 / dt) + (sigma_gbm_est ** 2) / 2)
+
+        dW1 = (np.log(spots) - np.log(spots.shift(1)) - (r - 1 / 2 * vols.shift(1)) * dt) / vols.shift(1) ** (1 / 2)
+        dW2 = (vols - vols.shift(1) - kappa_est * (theta_est - vols.shift(1)) * dt) / (
+                    sigma_est * vols.shift(1) ** (1 / 2))
+        ro = 1 / n / dt * (dW1.dropna() * dW2.dropna()).sum()
+
+        if ro[0] < -1:
+            ro = -0.99
+        elif ro[0] > 1:
+            ro = 0.99
+
+        return r, kappa_est, sigma_est, theta_est, ro
+
+
+
 
 
 
@@ -408,8 +435,8 @@ if __name__ == "__main__":
     start_time = time.time()
     r = 0  # risk-free interest rate
     q = 0.0  # dividend
-    maturity = 3  # longest maturity
-    dt = 1 / 52  # size of time-step
+    maturity = 10  # longest maturity
+    dt = 1 / 252  # size of time-step
     S_0 = 100  # initila asset price
 
     kappa = 2  # mean-reversion rate
@@ -429,18 +456,49 @@ if __name__ == "__main__":
     #
     # plt.plot(V)
     # plt.show()
-    params_ekf = Heston.calibrate_ekf(S)
+    params_ekf, V_k1, P_k1 = Heston.calibrate_ekf(S)
+
+    plt.style.use('seaborn-white')
+    fig, axes = plt.subplots(3, 2, figsize=(15, 12))
+    axes[0, 0].plot(params_ekf[:, 0], color='k')
+    axes[0, 0].axhline(kappa, color='r', linestyle='-')
+    axes[0, 0].set_title('kappa', fontsize=24)
+
+    axes[0, 1].plot(params_ekf[:, 1] / params_ekf[:, 0], color='k')
+    axes[0, 1].axhline(theta, color='r', linestyle='-')
+    axes[0, 1].set_title('theta', fontsize=24)
+
+    axes[1, 0].plot(params_ekf[:, 2], color='k')
+    axes[1, 0].axhline(sigma, color='r', linestyle='-')
+    axes[1, 0].set_title('sigma', fontsize=24)
+
+    axes[1, 1].plot(params_ekf[:, 3], color='k')
+    axes[1, 1].set_title('rho', fontsize=24)
+
+    axes[2, 0].plot(V_k1, color='k')
+    axes[2, 0].plot(V, color='r', linestyle='-')
+    axes[2, 0].set_title('Volatilities', fontsize=24)
+
+    axes[2, 1].plot(P_k1, color='k')
+    axes[2, 1].set_title('Covariance', fontsize=24)
+
+    fig.suptitle('CEKF-NMLE estimations', fontsize=30)
+
+    plt.show()
+
 
     df_spot = pd.DataFrame(S).T
     df_vol = pd.DataFrame(V).T
 
-    param_estimated, estimated_v = Heston.calibrate_i(S)
+    param_estimated, estimated_v = Heston.calibrate_i(S, dt)
 
     df_estimates = pd.concat(
-        [pd.DataFrame(param_estimated, columns=['AW estimate']),
-         pd.DataFrame(param_original, columns=['Original values'])],
-        axis=1)
+        [pd.DataFrame({'kappa': kappa, 'theta': theta, 'sigma': sigma,
+                       'v0': v0, 'rho': rho}, index=['Original values']),
+         pd.DataFrame(param_estimated, index=['estimated'])],
+        axis=0)
     print(df_estimates)
+    df_estimates.to_csv(r'C:\Users\eyyup\Desktop\DTU\master thesis\plots\atiya_wall_results.csv')
     plt.plot(estimated_v)
     plt.plot(V)
     plt.show()
